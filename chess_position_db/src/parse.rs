@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 use encoding_rs::WINDOWS_1252;
 use encoding_rs_io::DecodeReaderBytesBuilder;
 
@@ -8,6 +10,7 @@ use std::io::{BufRead, BufReader};
 
 use pgnparse::parser::*;
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct MoveStats {
     pub move_san: String,
     pub fen_after: String,
@@ -23,29 +26,33 @@ impl MoveStats {
             fen_after,
             times_played: 1,
             times_white_won: if result == "1-0" { 1 } else { 0 },
-            times_black_won: if result == "0-1" { 1 } else { 0 }
+            times_black_won: if result == "0-1" { 1 } else { 0 },
         }
     }
-    
+
     pub fn update_times_won(&mut self, result: &str) {
         match result {
             "1-0" => self.times_white_won += 1,
             "0-1" => self.times_black_won += 1,
-             _ => (),
+            _ => (),
         }
     }
 }
 
 impl fmt::Display for MoveStats {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "({}, times played: {}, win rate[white]: {:.3}, win rate[black]: {:.3}))",
-                      self.move_san,
-                      self.times_played,
-                      self.times_white_won as f32 / self.times_played as f32,
-                      self.times_black_won as f32 / self.times_played as f32);
+        return write!(
+            f,
+            "({}, times played: {}, win rate[white]: {:.3}, win rate[black]: {:.3}))",
+            self.move_san,
+            self.times_played,
+            self.times_white_won as f32 / self.times_played as f32,
+            self.times_black_won as f32 / self.times_played as f32
+        );
     }
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct PositionStats {
     pub side_to_play: char,
     pub played_moves: Vec<MoveStats>,
@@ -54,17 +61,17 @@ pub struct PositionStats {
 impl fmt::Display for PositionStats {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut str_ = format!("Plays: {} - ", self.side_to_play);
-        
+
         for move_ in &self.played_moves {
             str_ = str_ + &format!("{}, ", move_);
         }
-        
+
         return write!(f, "{}", str_);
     }
 }
 
 impl PositionStats {
-    fn new(side_to_play: char) -> PositionStats {
+    pub fn new(side_to_play: char) -> PositionStats {
         PositionStats {
             side_to_play,
             played_moves: Vec::new(),
@@ -83,10 +90,11 @@ pub const START_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN
 
 pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, PositionStats>> {
     let file = File::open(pgnfile_name)?;
-    let reader = 
-        BufReader::new(DecodeReaderBytesBuilder::new()
+    let reader = BufReader::new(
+        DecodeReaderBytesBuilder::new()
             .encoding(Some(WINDOWS_1252))
-            .build(file));
+            .build(file),
+    );
 
     let mut pgn_game = Vec::new();
     let mut n_games = 0;
@@ -112,18 +120,15 @@ pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, Po
 
         let line = read_line.trim_end().to_string();
         pgn_game.push(line.to_string());
-        
+
         if parsing_game
-            && (line.ends_with("0-1")
-                || line.ends_with("1-0")
-                || line.ends_with("1/2-1/2"))
+            && (line.ends_with("0-1") || line.ends_with("1-0") || line.ends_with("1/2-1/2"))
         {
             // game finished
             if !pgn_game.is_empty() {
                 // parse game
                 println!("Parsing game number #{}", n_games);
-                let result = parse_pgn_to_rust_struct(
-                    pgn_game.join("\n"));
+                let result = parse_pgn_to_rust_struct(pgn_game.join("\n"));
                 let game_result = &result.headers["Result"].trim().to_string();
 
                 for move_ in result.moves {
@@ -134,38 +139,38 @@ pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, Po
 
                     // get rid of unnecessary info like move number
                     // otherwise we cannot find transpositions
-                    let fen_after_copy = move_.fen_after
-                        .to_string().split(" - ").next().unwrap().to_string();
+                    let fen_after_copy = move_
+                        .fen_after
+                        .to_string()
+                        .split(" - ")
+                        .next()
+                        .unwrap()
+                        .to_string();
 
                     if !position_db.contains_key(&fen_before) {
-                        position_db.insert(fen_before.clone(),
-                                           PositionStats::new(
-                                                side_to_play));
+                        position_db.insert(fen_before.clone(), PositionStats::new(side_to_play));
                     }
 
-                    let position =
-                        position_db.get_mut(&fen_before).unwrap();
+                    let position = position_db.get_mut(&fen_before).unwrap();
                     let mut seen = false;
 
-                    for played_move_ in
-                            &mut position.played_moves {
+                    for played_move_ in &mut position.played_moves {
                         if played_move_.move_san == move_.san {
                             played_move_.times_played += 1;
                             played_move_.update_times_won(game_result);
                             seen = true;
-                            position.played_moves.sort_by_key(
-                                |p| p.times_played);
+                            position.played_moves.sort_by_key(|p| p.times_played);
                             break;
                         }
                     }
 
                     if !seen {
-                        let move_stats = MoveStats::new(move_.san.to_string(),
-                                                                   fen_after_copy.clone(),
-                                                                   game_result);
-                        position
-                            .played_moves
-                            .push(move_stats);
+                        let move_stats = MoveStats::new(
+                            move_.san.to_string(),
+                            fen_after_copy.clone(),
+                            game_result,
+                        );
+                        position.played_moves.push(move_stats);
                     }
 
                     fen_before = fen_after_copy;
