@@ -1,0 +1,4 @@
+.project
+Cargo.lock
+target/
+millionbase-2.5.pgn

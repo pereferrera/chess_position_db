@@ -1,0 +1,54 @@
+[package]
+name = "chess_position_db"
+version = "0.1.0"
+authors = ["Pere Ferrera Bertran <ferrerabertran@gmail.com>"]
+description = "..."
+homepage = "..."
+documentation = "..."
+readme = "README.md"
+keywords = []
+license = "MIT"
+categories = []
+repository = "..."
+autobenches = false
+
+include = [
+    "src/*",
+    "tests/*.rs",
+    "Cargo.toml",
+    ".gitignore",
+    "README.md"
+]
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[profile.test]
+opt-level = 3
+debug = true
+debug-assertions = true
+codegen-units = 1
+
+[lib]
+name = "chess_position_db"
+bench = true
+path = "src/lib.rs"
+doctest = true
+
+[dependencies]
+pgnparse = "0.1.15"
+env_logger = "0.10.0"
+log = "0.4.17"
+serde_json = "1.0.91"
+encoding_rs = "0.8.31"
+encoding_rs_io = "0.1.7"
+
+[features]
+default = []
+nightly = []
+
