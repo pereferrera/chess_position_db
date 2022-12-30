@@ -1,3 +1,5 @@
+![build status](https://github.com/pereferrera/chess_position_db/actions/workflows/test.yml/badge.svg)
+
 Building a database of chess positions // played moves while learning Rust at the same time.
 The database associates a FEN key with a set of movement statistics: movement played, times played, win rate for white, win rate for black, etc.
 This database can then be used as an opening book or for other purposes e.g. to enrich a chess engine.
