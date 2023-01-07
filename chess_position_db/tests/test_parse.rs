@@ -9,10 +9,10 @@ mod tests {
 
     #[test]
     fn test_parse_database() {
-        let res = parse_database("test_dataset.pgn");
+        let mut position_db = BtreeKVStore::new();
+        parse_database("test_dataset.pgn", &mut position_db);
 
-        let position_db = res.unwrap();        
-        let position_stats = position_db.get(START_POSITION_FEN).unwrap();
+        let position_stats = position_db.get(&START_POSITION_FEN.to_string()).to_owned();
 
         let most_popular_move = &position_stats.played_moves[0]; // d4
         let second_most_popular_move = &position_stats.played_moves[1]; // c4
@@ -29,7 +29,7 @@ mod tests {
 
         // follow next moves
         let fen_after_d4 = &most_popular_move.fen_after;
-        let position_stats_after_d4 = position_db.get(fen_after_d4).unwrap();
+        let position_stats_after_d4 = position_db.get(fen_after_d4).to_owned();
         let most_popular_move_after_d4 = &position_stats_after_d4.played_moves[0];
  
         assert_eq!(most_popular_move_after_d4.move_san, "Nf6");

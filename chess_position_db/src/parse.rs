@@ -52,6 +52,16 @@ impl fmt::Display for MoveStats {
     }
 }
 
+impl Clone for MoveStats {
+    fn clone(&self) -> MoveStats {
+        MoveStats { move_san: self.move_san.to_owned(),
+                    fen_after: self.fen_after.to_owned(),
+                    times_played: self.times_played,
+                    times_white_won: self.times_white_won,
+                    times_black_won: self.times_black_won }
+    }
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct PositionStats {
     pub side_to_play: char,
@@ -86,9 +96,46 @@ impl PositionStats {
     }
 }
 
+impl Clone for PositionStats {
+    fn clone(&self) -> PositionStats {
+        PositionStats { side_to_play: self.side_to_play,
+                        played_moves: self.played_moves.clone() }
+    }
+}
+
+pub trait ChessPositionsStore {
+    fn insert(&mut self, key: &String, value: PositionStats);
+    fn contains_key(&self, key: &String) -> bool;
+    fn get(&mut self, key: &String) -> &mut PositionStats;
+}
+
+pub struct BtreeKVStore {
+    data: BTreeMap<String, PositionStats>
+}
+
+impl BtreeKVStore {
+    pub fn new() -> BtreeKVStore {
+        BtreeKVStore { data: BTreeMap::new() }
+    }
+}
+
+impl ChessPositionsStore for BtreeKVStore {
+    fn insert(&mut self, key: &String, value: PositionStats) {
+        self.data.insert(key.to_string(), value);
+    }
+
+    fn contains_key(&self, key: &String) -> bool {
+        self.data.contains_key(key)
+    }
+
+    fn get(&mut self, key: &String) -> &mut PositionStats {
+        self.data.get_mut(key).unwrap()
+    }
+}
+
 pub const START_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq";
 
-pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, PositionStats>> {
+pub fn parse_database(pgnfile_name: &str, position_db: &mut dyn ChessPositionsStore) -> std::io::Result<bool> {
     let file = File::open(pgnfile_name)?;
     let reader = BufReader::new(
         DecodeReaderBytesBuilder::new()
@@ -103,8 +150,7 @@ pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, Po
     // start position of a board
     let start_position_stats = PositionStats::start_position();
 
-    let mut position_db: BTreeMap<String, PositionStats> = BTreeMap::new();
-    position_db.insert(START_POSITION_FEN.to_string(), start_position_stats);
+    position_db.insert(&START_POSITION_FEN.to_string(), start_position_stats);
 
     let mut fen_before: String = START_POSITION_FEN.to_string();
 
@@ -148,10 +194,10 @@ pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, Po
                         .to_string();
 
                     if !position_db.contains_key(&fen_before) {
-                        position_db.insert(fen_before.clone(), PositionStats::new(side_to_play));
+                        position_db.insert(&fen_before.clone(), PositionStats::new(side_to_play));
                     }
 
-                    let position = position_db.get_mut(&fen_before).unwrap();
+                    let position = position_db.get(&fen_before);
                     let mut seen = false;
 
                     for played_move_ in &mut position.played_moves {
@@ -181,5 +227,5 @@ pub fn parse_database(pgnfile_name: &str) -> std::io::Result<BTreeMap<String, Po
         }
     }
 
-    Ok(position_db)
+    Ok(true)
 }
