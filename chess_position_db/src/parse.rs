@@ -1,141 +1,20 @@
-use serde::{Serialize, Deserialize};
-
 use encoding_rs::WINDOWS_1252;
 use encoding_rs_io::DecodeReaderBytesBuilder;
 
-use std::collections::BTreeMap;
-use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use pgnparse::parser::*;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct MoveStats {
-    pub move_san: String,
-    pub fen_after: String,
-    pub times_played: u16,
-    pub times_white_won: u16,
-    pub times_black_won: u16,
-}
+use model::*;
+use store::*;
 
-impl MoveStats {
-    fn new(move_san: String, fen_after: String, result: &str) -> MoveStats {
-        MoveStats {
-            move_san,
-            fen_after,
-            times_played: 1,
-            times_white_won: if result == "1-0" { 1 } else { 0 },
-            times_black_won: if result == "0-1" { 1 } else { 0 },
-        }
-    }
 
-    pub fn update_times_won(&mut self, result: &str) {
-        match result {
-            "1-0" => self.times_white_won += 1,
-            "0-1" => self.times_black_won += 1,
-            _ => (),
-        }
-    }
-}
-
-impl fmt::Display for MoveStats {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(
-            f,
-            "({}, times played: {}, win rate[white]: {:.3}, win rate[black]: {:.3}))",
-            self.move_san,
-            self.times_played,
-            self.times_white_won as f32 / self.times_played as f32,
-            self.times_black_won as f32 / self.times_played as f32
-        );
-    }
-}
-
-impl Clone for MoveStats {
-    fn clone(&self) -> MoveStats {
-        MoveStats { move_san: self.move_san.to_owned(),
-                    fen_after: self.fen_after.to_owned(),
-                    times_played: self.times_played,
-                    times_white_won: self.times_white_won,
-                    times_black_won: self.times_black_won }
-    }
-}
-
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct PositionStats {
-    pub side_to_play: char,
-    pub played_moves: Vec<MoveStats>,
-}
-
-impl fmt::Display for PositionStats {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut str_ = format!("Plays: {} - ", self.side_to_play);
-
-        for move_ in &self.played_moves {
-            str_ = str_ + &format!("{}, ", move_);
-        }
-
-        return write!(f, "{}", str_);
-    }
-}
-
-impl PositionStats {
-    pub fn new(side_to_play: char) -> PositionStats {
-        PositionStats {
-            side_to_play,
-            played_moves: Vec::new(),
-        }
-    }
-
-    fn start_position() -> PositionStats {
-        PositionStats {
-            side_to_play: 'w',
-            played_moves: Vec::new(),
-        }
-    }
-}
-
-impl Clone for PositionStats {
-    fn clone(&self) -> PositionStats {
-        PositionStats { side_to_play: self.side_to_play,
-                        played_moves: self.played_moves.clone() }
-    }
-}
-
-pub trait ChessPositionsStore {
-    fn insert(&mut self, key: &String, value: PositionStats);
-    fn contains_key(&self, key: &String) -> bool;
-    fn get(&mut self, key: &String) -> &mut PositionStats;
-}
-
-pub struct BtreeKVStore {
-    data: BTreeMap<String, PositionStats>
-}
-
-impl BtreeKVStore {
-    pub fn new() -> BtreeKVStore {
-        BtreeKVStore { data: BTreeMap::new() }
-    }
-}
-
-impl ChessPositionsStore for BtreeKVStore {
-    fn insert(&mut self, key: &String, value: PositionStats) {
-        self.data.insert(key.to_string(), value);
-    }
-
-    fn contains_key(&self, key: &String) -> bool {
-        self.data.contains_key(key)
-    }
-
-    fn get(&mut self, key: &String) -> &mut PositionStats {
-        self.data.get_mut(key).unwrap()
-    }
-}
-
-pub const START_POSITION_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq";
-
-pub fn parse_database(pgnfile_name: &str, position_db: &mut dyn ChessPositionsStore) -> std::io::Result<bool> {
+pub fn parse_database(pgnfile_name: &str,
+                      position_db: &mut dyn ChessPositionsStore) -> std::io::Result<bool> {
+    // parses the database of positions based on the PGN file passed
+    // and stores it in the implementation of ChessPositionStore passed as
+    // second argument
     let file = File::open(pgnfile_name)?;
     let reader = BufReader::new(
         DecodeReaderBytesBuilder::new()
@@ -174,7 +53,8 @@ pub fn parse_database(pgnfile_name: &str, position_db: &mut dyn ChessPositionsSt
             if !pgn_game.is_empty() {
                 // parse game
                 println!("Parsing game number #{}", n_games);
-                let result = parse_pgn_to_rust_struct(pgn_game.join("\n"));
+                let result = parse_pgn_to_rust_struct(
+                    pgn_game.join("\n"));
                 let game_result = &result.headers["Result"].trim().to_string();
 
                 for move_ in result.moves {
@@ -194,10 +74,11 @@ pub fn parse_database(pgnfile_name: &str, position_db: &mut dyn ChessPositionsSt
                         .to_string();
 
                     if !position_db.contains_key(&fen_before) {
-                        position_db.insert(&fen_before.clone(), PositionStats::new(side_to_play));
+                        position_db.insert(&fen_before.clone(),
+                                           PositionStats::new(side_to_play));
                     }
 
-                    let position = position_db.get(&fen_before);
+                    let mut position: PositionStats = position_db.get(&fen_before);
                     let mut seen = false;
 
                     for played_move_ in &mut position.played_moves {
@@ -218,6 +99,8 @@ pub fn parse_database(pgnfile_name: &str, position_db: &mut dyn ChessPositionsSt
                         );
                         position.played_moves.push(move_stats);
                     }
+
+                    position_db.insert(&fen_before.clone(), position);
 
                     fen_before = fen_after_copy;
                 }

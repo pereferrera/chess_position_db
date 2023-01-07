@@ -10,4 +10,5 @@ extern crate bincode;
 extern crate sled;
 
 pub mod parse;
-
+pub mod model;
+pub mod store;

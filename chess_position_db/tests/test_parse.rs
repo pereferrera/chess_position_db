@@ -3,6 +3,8 @@
 extern crate chess_position_db;
 
 use chess_position_db::parse::*;
+use chess_position_db::model::*;
+use chess_position_db::store::*;
 
 mod tests {
     use super::*;

@@ -2,3 +2,4 @@
 Cargo.lock
 target/
 millionbase-2.5.pgn
+parsed_db
