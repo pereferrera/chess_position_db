@@ -12,3 +12,4 @@ extern crate sled;
 pub mod parse;
 pub mod model;
 pub mod store;
+pub mod dag;

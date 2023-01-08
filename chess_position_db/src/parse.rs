@@ -6,12 +6,101 @@ use std::io::{BufRead, BufReader};
 
 use pgnparse::parser::*;
 
+use dag::*;
 use model::*;
 use store::*;
 
+pub fn parse_dag(pgnfile_name: &str) -> std::io::Result<PositionStatsDAG> {
+    let mut root_node = PositionStatsDAG::start_position();
 
-pub fn parse_database(pgnfile_name: &str,
-                      position_db: &mut dyn ChessPositionsStore) -> std::io::Result<bool> {
+    let file = File::open(pgnfile_name)?;
+    let reader = BufReader::new(
+        DecodeReaderBytesBuilder::new()
+            .encoding(Some(WINDOWS_1252))
+            .build(file),
+    );
+
+    let mut pgn_game = Vec::new();
+    let mut n_games = 0;
+    let mut parsing_game = false;
+
+    let mut current_position = &mut root_node;
+
+    for line in reader.lines() {
+        let read_line = line?;
+
+        if !parsing_game && read_line.starts_with("[") {
+            // new game
+            pgn_game = Vec::new();
+            parsing_game = true;
+            current_position = &mut root_node;
+        }
+
+        let line = read_line.trim_end().to_string();
+        pgn_game.push(line.to_string());
+
+        if parsing_game
+            && (line.ends_with("0-1") || line.ends_with("1-0") || line.ends_with("1/2-1/2"))
+        {
+            // game finished
+            if !pgn_game.is_empty() {
+                // parse game
+                println!("Parsing game number #{}", n_games);
+                let result = parse_pgn_to_rust_struct(pgn_game.join("\n"));
+                let game_result = &result.headers["Result"].trim().to_string();
+
+                for move_ in result.moves {
+                    let played_moves = &mut current_position.played_moves;
+
+                    let mut seen = false;
+                    let mut played_move_index = 0;
+
+                    for played_move_ in played_moves {
+                        if played_move_.move_san == move_.san {
+                            played_move_.times_played += 1;
+                            played_move_.update_times_won(game_result);
+                            seen = true;
+                            break;
+                        }
+                        played_move_index += 1;
+                    } // note: played_moves went out of scope here already
+
+                    current_position.sort_moves();
+                    let played_moves = &mut current_position.played_moves;
+
+                    if seen {
+                        current_position = &mut played_moves[played_move_index].position_after;
+                        continue;
+                    } // note: played_moves went out of scope here already
+
+                    let move_stats_dag = MoveStatsDAG::new(
+                        move_.san.to_string(),
+                        game_result,
+                        if current_position.side_to_play == 'w' {
+                            'b'
+                        } else {
+                            'w'
+                        },
+                    );
+                    played_moves.push(move_stats_dag);
+
+                    let played_moves_len = played_moves.len();
+                    current_position = &mut played_moves[played_moves_len - 1].position_after;
+                }
+
+                n_games += 1;
+                parsing_game = false;
+            }
+        }
+    }
+
+    Ok(root_node)
+}
+
+pub fn parse_database(
+    pgnfile_name: &str,
+    position_db: &mut dyn ChessPositionsStore,
+) -> std::io<bool> {
     // parses the database of positions based on the PGN file passed
     // and stores it in the implementation of ChessPositionStore passed as
     // second argument
@@ -53,8 +142,7 @@ pub fn parse_database(pgnfile_name: &str,
             if !pgn_game.is_empty() {
                 // parse game
                 println!("Parsing game number #{}", n_games);
-                let result = parse_pgn_to_rust_struct(
-                    pgn_game.join("\n"));
+                let result = parse_pgn_to_rust_struct(pgn_game.join("\n"));
                 let game_result = &result.headers["Result"].trim().to_string();
 
                 for move_ in result.moves {
@@ -74,8 +162,7 @@ pub fn parse_database(pgnfile_name: &str,
                         .to_string();
 
                     if !position_db.contains_key(&fen_before) {
-                        position_db.insert(&fen_before.clone(),
-                                           PositionStats::new(side_to_play));
+                        position_db.insert(&fen_before.clone(), PositionStats::new(side_to_play));
                     }
 
                     let mut position: PositionStats = position_db.get(&fen_before);

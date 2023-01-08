@@ -18,6 +18,15 @@ fn parse_db() {
     println!("from start position -> {}", position_stats);
 }
 
+fn test_parse_dag() {
+    let file_name = "chess_position_db/test_dataset.pgn";
+//    let file_name = "millionbase-2.5.pgn";
+
+    let dag = parse_dag(file_name);
+    let root_position = dag.unwrap();
+    println!("start position -> {}", root_position);
+}
+
 fn main() {
-    parse_db()
+    test_parse_dag()
 }
